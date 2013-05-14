@@ -7,6 +7,26 @@ $(function() {
       testDb = testServer("testdb"),
       syncCopy = testServer("testcopy");
 
+
+  function syncUntilIdle(server, repl, cb) {
+    server.post("_replicate", repl, function(err, sync) {
+      var pollStatus = setInterval(function() {
+        server.get("_active_tasks", function(err, ok) {
+          var task;
+          for (var i = ok.length - 1; i >= 0; i--) {
+            if (ok[i].task == sync.session_id) {
+              task = ok[i];
+            }
+          };
+          if (task.status == "Idle") {
+            clearInterval(pollStatus);
+            cb(false, task)
+          }
+        })
+      },200);
+    })
+  };
+
   test("couchbase lite is reachable", function(t) {
     console.log("tappin", t)
     testServer.get(function(err, info) {
@@ -43,26 +63,12 @@ $(function() {
   });
 
   test("sync to sync_gateway", function(t) {
-    testServer.post("_replicate", {
+    syncUntilIdle(testServer,{
       source : "testdb",
       target : syncGateway,
       continuous : true
-    }, function(err, sync) {
-      t.ok(!err)
-      var pollStatus = setInterval(function() {
-        testServer.get("_active_tasks", function(err, ok) {
-          var task;
-          for (var i = ok.length - 1; i >= 0; i--) {
-            if (ok[i].task == sync.session_id) {
-              task = ok[i];
-            }
-          };
-          if (task.status == "Idle") {
-            clearInterval(pollStatus);
-            t.end();
-          }
-        })
-      },200);
+    }, function(err, ok) {
+      t.end();
     })
   })
 
@@ -83,11 +89,20 @@ $(function() {
 
 
   test("sync from sync_gateway", function(t) {
-    t.end()
+    syncUntilIdle(testServer,{
+      source : syncGateway,
+      target : "testcopy",
+      continuous : true
+    }, function(err, ok) {
+      t.end();
+    })
   })
 
   test("verify data", function(t) {
-    t.end()
+    syncCopy.get("_all_docs", function(err, data) {
+      console.log("_all_docs", data);
+      t.end()
+    })
   })
 
 });
