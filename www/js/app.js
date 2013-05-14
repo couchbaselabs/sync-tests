@@ -2,6 +2,12 @@ $(function() {
   var coax = require("coax"),
     test = require("tape");
 
+window.console = {
+  log : function(message) {
+    $('#log').prepend('<p>'+message+'</p>')
+  }
+}
+
   var syncGateway = "http://localhost:4984/test"
       testServer = coax("http://lite.couchbase./"),
       testDb = testServer("testdb"),
@@ -57,7 +63,8 @@ $(function() {
       docs.push({_id:i.toString(36), i:i});
     };
     testDb.post("_bulk_docs", {docs:docs}, function(err, ok) {
-      console.log("_bulk_docs", err, ok)
+      // console.log("_bulk_docs", err, ok)
+      t.notOk(err)
       t.end()
     });
   });
@@ -99,8 +106,13 @@ $(function() {
   })
 
   test("verify data", function(t) {
-    syncCopy.get("_all_docs", function(err, data) {
-      console.log("_all_docs", data);
+    syncCopy.get(["_all_docs", {include_docs : true}],
+      function(err, view) {
+      console.log("_all_docs", view.rows);
+      for (var i = 35; i >= 1; i--) {
+        var doc = view.rows.pop().doc;
+        t.equal(doc.i, i)
+      };
       t.end()
     })
   })
